@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"  
+            xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"  
+            x:Class="StandUpAlarmPOC.MainPage">  
+   <Grid>  
+       <CollectionView ItemsSource="{Binding Alarms}">  
+           <CollectionView.ItemTemplate>  
+               <DataTemplate>  
+                   <Border Padding="10" Margin="5">  
+                       <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">  
+                           <Label Text="{Binding Name}" FontSize="Medium"/>  
+                           <Label Grid.Row="1" Text="{Binding StartTime, StringFormat='Start: {0:hh\\:mm}'}"/>  
+                           <Label Grid.Row="1" Grid.Column="1" Text="{Binding EndTime, StringFormat='End: {0:hh\\:mm}'}"/>  
+                           <Label Grid.Row="2" Text="{Binding ExactMinuteToStart, StringFormat='Minute: {0}'}"/>  
+                           <Switch Grid.Row="3" IsToggled="{Binding WorkWeek}" IsEnabled="False"/>
+                            <Button BackgroundColor="DarkSlateBlue" WidthRequest="40" BorderColor="MediumVioletRed" BorderWidth="1" MaximumHeightRequest="40" Grid.Row="3" Grid.Column="1" Text="🗑️" Clicked="OnDeleteClicked" CommandParameter="{Binding Id}"/>
+                        </Grid>
+                       <Border.GestureRecognizers>  
+                           <TapGestureRecognizer Tapped="OnAlarmTapped"/>  
+                       </Border.GestureRecognizers>  
+                   </Border>  
+               </DataTemplate>  
+           </CollectionView.ItemTemplate>  
+       </CollectionView>  
+       <Button Text="+" HorizontalOptions="End" VerticalOptions="End" Margin="20" Clicked="AddAlarm"/>
+
+    </Grid>  
+</ContentPage>

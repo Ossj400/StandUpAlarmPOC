@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35828.75 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StandUpAlarmPOC", "StandUpAlarmPOC\StandUpAlarmPOC.csproj", "{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|ARM64 = Debug|ARM64
+		rel|Any CPU = rel|Any CPU
+		rel|ARM64 = rel|ARM64
+		Release|Any CPU = Release|Any CPU
+		Release|ARM64 = Release|ARM64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Debug|ARM64.Build.0 = Debug|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Debug|ARM64.Deploy.0 = Debug|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.rel|Any CPU.ActiveCfg = rel|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.rel|Any CPU.Build.0 = rel|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.rel|Any CPU.Deploy.0 = rel|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.rel|ARM64.ActiveCfg = rel|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.rel|ARM64.Build.0 = rel|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.rel|ARM64.Deploy.0 = rel|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Release|ARM64.ActiveCfg = Release|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Release|ARM64.Build.0 = Release|ARM64
+		{EB12E9AD-C7F0-4756-A86D-FAB5621B4CD6}.Release|ARM64.Deploy.0 = Release|ARM64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {749615A5-55FC-4198-99C3-5C3235850B28}
+	EndGlobalSection
+EndGlobal
