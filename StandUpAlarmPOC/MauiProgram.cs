@@ -1,5 +1,10 @@
 ﻿using Fonts;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.LifecycleEvents;
+using StandUpAlarmPOC.Interfaces;
+#if ANDROID
+using StandUpAlarmPOC.Platforms.Android.Services;
+#endif
 
 namespace StandUpAlarmPOC;
 
@@ -25,6 +30,17 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVibration>(Vibration.Default);
         builder.Services.AddSingleton<IDispatcher>(provider =>
             Application.Current.Dispatcher);
+        builder.ConfigureLifecycleEvents(events => {
+#if ANDROID
+        events.AddAndroid(android => android
+            .OnCreate((activity, bundle) => Platform.Init(activity, bundle)));
+#endif
+        });
+#if ANDROID
+        builder.Services.AddSingleton<ICamera>(sp => 
+    new AndroidCameraService());
+        builder.Services.AddSingleton<IImageProcessing, ImageProcessingService>();
+#endif
         return builder.Build();
 	}
 }

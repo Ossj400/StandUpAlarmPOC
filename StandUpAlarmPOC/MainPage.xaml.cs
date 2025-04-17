@@ -5,15 +5,22 @@ using StandUpAlarmPOC;
 
 namespace StandUpAlarmPOC
 {
+    using Interfaces;
+    using static System.Net.Mime.MediaTypeNames;
+
     public partial class MainPage : ContentPage
     {
         public ObservableCollection<AlarmModel> Alarms { get; } = new();
-
-        public MainPage()
+        private readonly ICamera _cameraService;
+        private IDisposable _frameCaptureDisposable;
+        private IImageProcessing _imageProcessor;
+        public MainPage(ICamera cameraService, IImageProcessing imageProcessing)
         {
             InitializeComponent();
             BindingContext = this;
             LoadAlarms();
+            _cameraService = cameraService;
+            _imageProcessor = imageProcessing;
         }
 
         private async void OnAlarmTapped(object sender, EventArgs e)
@@ -39,7 +46,88 @@ namespace StandUpAlarmPOC
             await Navigation.PushAsync(new AlarmDetailPage(newAlarm));
             SaveAlarms();
         }
+        private CancellationTokenSource _frameCaptureCancellationTokenSource;
 
+        private async void StartTakingFrames(object sender, EventArgs e)
+        {
+#if ANDROID
+
+            try
+            {
+                await _cameraService.InitializeCameraAsync();
+
+                _frameCaptureCancellationTokenSource = new CancellationTokenSource();
+                await StartFrameCaptureLoop(_frameCaptureCancellationTokenSource.Token);
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", $"An error occurred while starting frame capture: {ex.Message}", "OK");
+            }
+#endif
+
+        }
+
+        private async Task StartFrameCaptureLoop(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Run(async () =>
+                {
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        await ProcessFrame();
+                        await Task.Delay(5200); // 0.2 seconds
+                    }
+                }, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    await DisplayAlert("Error", $"Frame capture loop error: {ex.Message}", "OK");
+                });
+            }
+        }
+
+        private void StopTakingFrames(object sender, EventArgs e)
+        {
+            _frameCaptureCancellationTokenSource?.Cancel();
+            _frameCaptureCancellationTokenSource = null;
+        }
+        private async Task ProcessFrame()
+        {
+            try
+            {
+                await _cameraService.OpenCameraAsync();
+                await _cameraService.EnsureCaptureSessionAsync();
+                using var stream = await _cameraService.CaptureFrameAsync();
+                var fileName = $"frame_{DateTime.Now:yyyyMMdd_HHmmssfff}.jpg";
+                var filePath = Path.Combine(FileSystem.CacheDirectory, fileName);
+                using (var fileStream = File.Create(filePath))
+                {
+                    await stream.CopyToAsync(fileStream);
+                }
+                var (img, txt) = await _imageProcessor.ProcessUploadedImage(CapturedFrameImage);
+
+                // Optional: Display path in UI
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    ResultImage.Source = img;
+                    DetectedText.Text = txt;
+                    CapturedFrameImage.Source = ImageSource.FromFile(filePath);
+                });
+
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", $"Frame error: {ex.Message}", "OK");
+            }
+            finally
+            {
+                await _cameraService.CloseCameraAsync();
+
+            }
+        }
         protected override void OnAppearing()
         {
             base.OnAppearing();

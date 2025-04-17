@@ -1,11 +1,12 @@
 ﻿namespace StandUpAlarmPOC
 {
+    using Interfaces;
     public partial class App : Application
     {
-        public App()
+        public App(ICamera camera, IImageProcessing image)
         {
             InitializeComponent();
-            MainPage = new NavigationPage(new MainPage());
+            MainPage = new NavigationPage(new MainPage(camera, image));
         }
 
         protected override Window CreateWindow(IActivationState activationState)
