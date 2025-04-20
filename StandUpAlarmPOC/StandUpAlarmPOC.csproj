@@ -109,6 +109,9 @@
 	  <MauiAsset Update="Resources\Raw\european_mobile_vit_v2_ocr.onnx">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </MauiAsset>
+	  <MauiAsset Update="Resources\Raw\plate.jpg">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </MauiAsset>
 	  <MauiAsset Update="Resources\Raw\plate.png">
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </MauiAsset>

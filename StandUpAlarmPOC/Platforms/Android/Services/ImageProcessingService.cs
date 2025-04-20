@@ -26,9 +26,9 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             {
                 // Replace with your actual path if needed
 
-                using var stream = await FileSystem.OpenAppPackageFileAsync("plate.png");
+                using var stream = await FileSystem.OpenAppPackageFileAsync("plate.jpg");
                 var ocr = new PlateOCRService("yolo-v9-t-384-license-plates-end2end.onnx","european_mobile_vit_v2_ocr.onnx");
-                var (imageRet, text) = await ocr.Run("plate.png");
+                var (imageRet, text) = await ocr.Run("plate.jpg");
 
                 return (imageRet, text);
             }
