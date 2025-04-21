@@ -6,7 +6,6 @@ using StandUpAlarmPOC;
 namespace StandUpAlarmPOC
 {
     using Interfaces;
-    using static System.Net.Mime.MediaTypeNames;
 
     public partial class MainPage : ContentPage
     {
@@ -76,7 +75,7 @@ namespace StandUpAlarmPOC
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         await ProcessFrame();
-                        await Task.Delay(5200); // 0.2 seconds
+                        await Task.Delay(400); // 0.2 seconds
                     }
                 }, cancellationToken);
             }
@@ -101,13 +100,22 @@ namespace StandUpAlarmPOC
                 await _cameraService.OpenCameraAsync();
                 await _cameraService.EnsureCaptureSessionAsync();
                 using var stream = await _cameraService.CaptureFrameAsync();
+
                 var fileName = $"frame_{DateTime.Now:yyyyMMdd_HHmmssfff}.jpg";
                 var filePath = Path.Combine(FileSystem.CacheDirectory, fileName);
+                ImageSource img;
+                string txt = string.Empty;
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                memoryStream.Seek(0, SeekOrigin.Begin); // rewind to start
+                (img, txt) = await _imageProcessor.ProcessUploadedImage(memoryStream);
                 using (var fileStream = File.Create(filePath))
                 {
                     await stream.CopyToAsync(fileStream);
+
+
                 }
-                var (img, txt) = await _imageProcessor.ProcessUploadedImage(CapturedFrameImage);
+
 
                 // Optional: Display path in UI
                 MainThread.BeginInvokeOnMainThread(() =>

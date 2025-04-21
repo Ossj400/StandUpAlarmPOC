@@ -20,15 +20,14 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             Console.WriteLine("Plates received: " + string.Join(", ", plates));
         }
 
-        public async Task<(ImageSource image, string text)> ProcessUploadedImage(Image image)
+        public async Task<(ImageSource image, string text)> ProcessUploadedImage(Stream imageStream)
         {
             try
             {
                 // Replace with your actual path if needed
 
-                using var stream = await FileSystem.OpenAppPackageFileAsync("plate.jpg");
                 var ocr = new PlateOCRService("yolo-v9-t-384-license-plates-end2end.onnx","european_mobile_vit_v2_ocr.onnx");
-                var (imageRet, text) = await ocr.Run("plate.jpg");
+                var (imageRet, text) = await ocr.Run(imageStream);
 
                 return (imageRet, text);
             }

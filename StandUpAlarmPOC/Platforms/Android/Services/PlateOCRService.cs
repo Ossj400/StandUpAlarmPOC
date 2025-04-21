@@ -7,7 +7,6 @@ using AndroidX.Annotations;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SkiaSharp;
-using static Android.Webkit.WebStorage;
 
 namespace StandUpAlarmPOC.Platforms.Android.Services
 {
@@ -36,13 +35,14 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return new InferenceSession(memoryStream.ToArray()); // Load model from byte[]
         }
 
-        public async Task<SKBitmap> LoadAndResizeAsync(string assetFileName, int width, int height)
+        public async Task<SKBitmap> LoadAndResizeAsync(Stream imageStream, int width, int height)
         {
-            using var stream = await FileSystem.OpenAppPackageFileAsync(assetFileName);
-            var original = SKBitmap.Decode(stream);
+
+
+            var original = SKBitmap.Decode(imageStream);
 
             if (original == null)
-                throw new Exception("Failed to decode image from asset: " + assetFileName);
+                throw new Exception("Failed to decode image from asset: " + imageStream);
 
             return original.Resize(new SKImageInfo(width, height), SKSamplingOptions.Default);
         }
@@ -297,9 +297,9 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return text;
         }
 
-        public async Task<(ImageSource image, string text)> Run(string imagePath)
+        public async Task<(ImageSource image, string text)> Run(Stream imageStream)
         {
-            var resizedImage = await LoadAndResizeAsync(imagePath, 384, 384);
+            var resizedImage = await LoadAndResizeAsync(imageStream, 384, 384);
             //return (ConvertSKBitmapToImageSource(resizedImage), "bad");
             //  var ru = Run(resizedImage);
             var boxes = DetectPlates(resizedImage);

@@ -8,6 +8,6 @@ namespace StandUpAlarmPOC.Interfaces
 {
     public interface IImageProcessing
     {
-        Task<(ImageSource image, string text)> ProcessUploadedImage(Image image);
+        Task<(ImageSource image, string text)> ProcessUploadedImage(Stream image);
     }
 }

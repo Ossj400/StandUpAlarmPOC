@@ -126,7 +126,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 );
 
                 await captureTcs.Task;
-                return await imageTcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                return await imageTcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
             }
             catch (Exception ex)
             {
