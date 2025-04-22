@@ -13,11 +13,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
     public class PlateOCRService
 
     {
-        private const int DetectorInputWidth = 384;
-        private const int DetectorInputHeight = 384;
-        private const int OcrInputWidth = 96;
-        private const int OcrInputHeight = 48;
-
         private InferenceSession detectorSession;
         private InferenceSession ocrSession;
         private static ImageSource previewImage;
@@ -158,9 +153,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
         public List<SKRectI> DetectPlates(SKBitmap image)
         {
             var meta = ocrSession.InputMetadata.First();
-
             var tensor = PrepareImageForDetection(image);
-           // previewImage = DetectionTensorToImage(inputData, image.Width, image.Height);
 
             var inputs = new List<NamedOnnxValue> {
             NamedOnnxValue.CreateFromTensor(detectorSession.InputMetadata.Keys.First(), tensor)
@@ -168,10 +161,8 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             using var results = detectorSession.Run(inputs);
             var output = results.First().AsTensor<float>();
-            Console.WriteLine($"OCR Output shape: {string.Join(" x ", output.Dimensions.ToArray())}");
-
+           // Console.WriteLine($"OCR Output shape: {string.Join(" x ", output.Dimensions.ToArray())}");
             var boxes = new List<SKRectI>();
-
             int numDetections = output.Dimensions[0];
             for (int i = 0; i < numDetections; i++)
             {
@@ -194,31 +185,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             }
 
             return boxes;
-        }
-        public string DecodeOcrFlatOutput(Tensor<float> output)
-        {
-            string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
-
-            var flat = output.ToArray();
-            var indices = flat.Select(f => (int)Math.Round(f)).ToList();
-
-            var result = new List<char>();
-            int? last = null;
-
-            foreach (var index in indices)
-            {
-                if (index >= alphabet.Length) continue;
-
-                char current = alphabet[index];
-
-                if (current == '_' || index == last)
-                    continue;
-
-                result.Add(current);
-                last = index;
-            }
-
-            return new string(result.ToArray());
         }
         public string DecodeSoftmaxFlatOutput(Tensor<float> output)
         {
@@ -269,18 +235,18 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             using var results = ocrSession.Run(inputs);
             var output = results.First().AsTensor<float>();
-            Console.WriteLine("OCR output shape: " + string.Join(" x ", output.Dimensions.ToArray())); 
-            Console.WriteLine("OCR raw output:");
-            Console.WriteLine(string.Join(", ", output.ToArray()));
+         //   Console.WriteLine("OCR output shape: " + string.Join(" x ", output.Dimensions.ToArray())); 
+          //  Console.WriteLine("OCR raw output:");
+          //  Console.WriteLine(string.Join(", ", output.ToArray()));
             var floatPredicted = output.ToArray();
             string text = DecodeSoftmaxFlatOutput(output);
-            Console.WriteLine("OCR raw output indices:");
-            Console.WriteLine(string.Join(", ", output.ToArray().Take(30)));
+         //   Console.WriteLine("OCR raw output indices:");
+           // Console.WriteLine(string.Join(", ", output.ToArray().Take(30)));
             var intPredicted = floatPredicted.Select(f => (int)Math.Round(f)).ToArray(); // 👈 safe conversion
 
             string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
             var meta = ocrSession.InputMetadata[inputName];
-            Console.WriteLine($"OCR Input shape: {string.Join(" x ", meta.Dimensions)}");
+          //  Console.WriteLine($"OCR Input shape: {string.Join(" x ", meta.Dimensions)}");
             var result = new List<char>();
             int? last = null;
 
@@ -300,8 +266,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
         public async Task<(ImageSource image, string text)> Run(Stream imageStream)
         {
             var resizedImage = await LoadAndResizeAsync(imageStream, 384, 384);
-            //return (ConvertSKBitmapToImageSource(resizedImage), "bad");
-            //  var ru = Run(resizedImage);
             var boxes = DetectPlates(resizedImage);
 
             foreach (var box in boxes)
@@ -365,8 +329,8 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
                 // Create tensor in NHWC format: [1, height, width, 1]
                 var dimensions = new int[] { 1, height, width, 1 };
-                Console.WriteLine($"First few grayscale bytes: {string.Join(", ", tensorData.Take(50))}");
-                previewImage = TensorToImageSource(tensorData, 140, 70);
+              //  Console.WriteLine($"First few grayscale bytes: {string.Join(", ", tensorData.Take(50))}");
+              //  previewImage = TensorToImageSource(tensorData, 140, 70);
 
                 return new DenseTensor<byte>(tensorData, dimensions);
             }
@@ -383,89 +347,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             using var stream = new MemoryStream(data.ToArray());
             return ImageSource.FromStream(() => new MemoryStream(stream.ToArray()));
         }
-
-        public (string PlateText, ImageSource PlateImage, ImageSource AnnotatedImage) Run(SKBitmap originalBitmap)
-        {
-            if (originalBitmap == null)
-                throw new ArgumentNullException(nameof(originalBitmap));
-
-
-
-            // 1. Detect license plate regions in the original image
-            var plateRegions = DetectPlates(originalBitmap);
-
-            // 2. Draw red bounding boxes on the original image for each detected region
-            if (plateRegions.Count > 0)
-            {
-                using (var canvas = new SKCanvas(originalBitmap))
-                using (var paint = new SKPaint())
-                {
-                    paint.Color = SKColors.Red;
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = 3;
-                    paint.IsAntialias = true;
-                    foreach (var region in plateRegions)
-                    {
-                        // region is assumed to be an SKRect (or convertible to SKRect) for the plate's bounding box
-                        SKRect rect = region;  // use directly if region is SKRect
-                                               // If region is in another format (e.g., Rect with int coordinates), convert to SKRect:
-                                               // SKRect rect = SKRect.Create(region.X, region.Y, region.Width, region.Height);
-                        canvas.DrawRect(rect, paint);
-                    }
-                }
-                // After disposing the canvas, the originalBitmap now has the rectangles drawn on it
-            }
-
-            // 3. Prepare the annotated original image as an ImageSource (for display in UI)
-            ImageSource annotatedImageSource;
-            using (SKImage annotatedImage = SKImage.FromBitmap(originalBitmap))
-            {
-                // Encode to PNG (or JPEG) format in memory
-                using SKData data = annotatedImage.Encode(SKEncodedImageFormat.Png, 100);
-                // Create a new stream from the encoded data for the ImageSource
-                byte[] imageBytes = data.ToArray();
-                annotatedImageSource = ImageSource.FromStream(() => new MemoryStream(imageBytes));
-            }
-
-            // 4. If at least one plate was detected, process the first plate for OCR
-            string plateText = string.Empty;
-            ImageSource plateImageSource = null;
-            if (plateRegions.Count > 0)
-            {
-                // Take the first detected plate region
-                SKRectI firstRegion = plateRegions[0];
-                // Crop the plate region from the original image
-                SKBitmap plateBitmap = new SKBitmap();
-                originalBitmap.ExtractSubset(plateBitmap, firstRegion);
-                if (Crop(originalBitmap, firstRegion) == null)
-                    return (plateText, plateImageSource, annotatedImageSource);
-                plateBitmap = Crop(originalBitmap, firstRegion);
-                using (var canvasCrop = new SKCanvas(plateBitmap))
-                {
-                    // Draw the portion of the original image corresponding to the plate region onto plateBitmap
-                    canvasCrop.DrawBitmap(originalBitmap, firstRegion, new SKRect(0, 0, firstRegion.Width, firstRegion.Height));
-                }
-
-                // 5. Preprocess the cropped plate image (grayscale, threshold, etc.)
-                // (This uses the existing preprocessing pipeline – not modified)
-                SKBitmap processedPlate = Crop(originalBitmap, firstRegion);
-
-                // 6. Perform OCR on the processed plate image to get the text
-                plateText = RecognizeText(processedPlate);
-
-                // 7. Convert the processed plate image to ImageSource for UI display
-                using (SKImage plateImage = SKImage.FromBitmap(processedPlate))
-                {
-                    using SKData plateData = plateImage.Encode(SKEncodedImageFormat.Png, 100);
-                    byte[] plateBytes = plateData.ToArray();
-                    plateImageSource = ImageSource.FromStream(() => new MemoryStream(plateBytes));
-                }
-            }
-
-            // Return the result: recognized text, grayscale plate image, and annotated original image
-            return (plateText, plateImageSource, annotatedImageSource);
-        }
-
 
     }
 }
