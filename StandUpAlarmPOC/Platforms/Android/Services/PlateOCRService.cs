@@ -40,19 +40,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return new InferenceSession(memoryStream.ToArray()); // Load model from byte[]
         }
 
-        public async Task<SKBitmap> LoadAndResizeAsync(int width, int height,
-            Stream? imageStream = null, SKBitmap? image = null)
-        {
-
-            if(image == null)
-                image = SKBitmap.Decode(imageStream);
-
-            if (image == null)
-                throw new Exception("Failed to decode image from asset: " + imageStream);
-
-            return image.Resize(new SKImageInfo(width, height), SKSamplingOptions.Default);
-        }
-
         public SKBitmap Crop(SKBitmap image, SKRectI cropRect)
         {
 
@@ -90,28 +77,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return cropped;
         }
 
-        public byte[] PrepareImageForOCR(SKBitmap croppedPlate)
-        {
-            int width = 140;
-            int height = 70;
-            var resized = croppedPlate.Resize(new SKImageInfo(width, height), SKSamplingOptions.Default);
-            byte[] tensorData = new byte[width * height];
-
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    var pixel = resized.GetPixel(x, y);
-
-                    // Convert to grayscale (using luminosity method)
-                    byte gray = (byte)(0.299 * pixel.Red + 0.587 * pixel.Green + 0.114 * pixel.Blue);
-                    tensorData[y * width + x] = gray;
-                }
-            }
-
-            return tensorData;
-        }
-
         public DenseTensor<float> PrepareImageForDetection(SKBitmap image)
         {
             int width = image.Width;
@@ -135,6 +100,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             return new DenseTensor<float>(tensorData, new[] { 1, 3, height, width }); // ✅ NCHW
         }
+
         public static ImageSource DetectionTensorToImage(float[] tensorData, int width, int height)
         {
             var bitmap = new SKBitmap(width, height);
@@ -191,19 +157,20 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             return boxes;
         }
-        public string DecodeSoftmaxFlatOutput(Tensor<float> output)
+
+        public string DecodeWithoutCollapse(Tensor<float> output)
         {
             string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
             var flat = output.ToArray();
 
-            int vocabSize = alphabet.Length; // 37
+            int vocabSize = alphabet.Length;
             int timeSteps = flat.Length / vocabSize;
 
             var result = new List<char>();
-            int? lastIndex = null;
 
             for (int t = 0; t < timeSteps; t++)
             {
+                // this float.MinValue is big issue but now fixing the thing with spacing 
                 float bestScore = float.MinValue;
                 int bestIndex = 0;
 
@@ -217,90 +184,36 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                     }
                 }
 
-                // CTC-style filtering
-                if (bestIndex != lastIndex && alphabet[bestIndex] != '_')
-                {
+                if (alphabet[bestIndex] != '_') // just skip blanks
                     result.Add(alphabet[bestIndex]);
-                    lastIndex = bestIndex;
-                }
             }
 
             return new string(result.ToArray());
         }
         public string RecognizeText(SKBitmap croppedPlate)
         {
-
             var tensor = PrepareGrayscaleTensor(croppedPlate);
             var inputName = ocrSession.InputMetadata.Keys.First();
             var inputs = new List<NamedOnnxValue>
-    {
-        NamedOnnxValue.CreateFromTensor(inputName, tensor)
-    };
-
+                {
+                    NamedOnnxValue.CreateFromTensor(inputName, tensor)
+                };
 
             using var results = ocrSession.Run(inputs);
             var output = results.First().AsTensor<float>();
-         //   Console.WriteLine("OCR output shape: " + string.Join(" x ", output.Dimensions.ToArray())); 
-          //  Console.WriteLine("OCR raw output:");
-          //  Console.WriteLine(string.Join(", ", output.ToArray()));
-            var floatPredicted = output.ToArray();
-            string text = DecodeSoftmaxFlatOutput(output);
-         //   Console.WriteLine("OCR raw output indices:");
-           // Console.WriteLine(string.Join(", ", output.ToArray().Take(30)));
-            var intPredicted = floatPredicted.Select(f => (int)Math.Round(f)).ToArray(); // 👈 safe conversion
 
-            string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
-            var meta = ocrSession.InputMetadata[inputName];
-          //  Console.WriteLine($"OCR Input shape: {string.Join(" x ", meta.Dimensions)}");
-            var result = new List<char>();
-            int? last = null;
-
-            foreach (var index in intPredicted)
-            {
-                if (index == last || index >= alphabet.Length || alphabet[index] == '_')
-                    continue;
-
-                result.Add(alphabet[index]);
-                last = index;
-            }
-
-            var textx = new string(result.ToArray());
-            return text;
+            return DecodeWithoutCollapse(output);
         }
 
         public async Task<(ImageSource image, string text)> Run(SKBitmap imageSkBitmp)
         {
-                    var text = RecognizeText(imageSkBitmp);
-                    previewImage = ConvertSKBitmapToImageSource(imageSkBitmp);
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        OnPreviewFrameChanged?.Invoke(previewImage);
-                        OnTextChanged?.Invoke(text);
-                    });
-            return (null, "No plates detected");
-        }
-
-        public async Task<(ImageSource image, string text)> Run(SKBitmap image, bool istrue)
-        {
-            var resizedImage = await LoadAndResizeAsync(640, 640, null, image);
-            var boxes = DetectPlates(resizedImage);
-            previewImage = ConvertSKBitmapToImageSource(resizedImage);
-
-            foreach (var box in boxes)
+            var text = RecognizeText(imageSkBitmp);
+            previewImage = ConvertSKBitmapToImageSource(imageSkBitmp);
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                var plateImage = Crop(resizedImage, box);
-                if (plateImage != null)
-                {
-                    var text = RecognizeText(plateImage);
-                    var imageAfterConv = ConvertSKBitmapToImageSource(plateImage);
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        OnTextChanged?.Invoke(text);
-                        OnPreviewFrameChanged?.Invoke(imageAfterConv);
-                    });
-                    return (imageAfterConv, text);
-                }
-            }
+                OnPreviewFrameChanged?.Invoke(previewImage);
+                OnTextChanged?.Invoke(text);
+            });
             return (null, "No plates detected");
         }
 
