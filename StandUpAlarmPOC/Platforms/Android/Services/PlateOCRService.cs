@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using AndroidX.Annotations;
+using Java.Util.Streams;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SkiaSharp;
@@ -15,12 +16,21 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
     {
         private InferenceSession detectorSession;
         private InferenceSession ocrSession;
-        private static ImageSource previewImage;
+        private ImageSource previewImage;
+        public Action<ImageSource> OnPreviewFrameChanged;
+        public Action<string> OnTextChanged;
+        private string _detectorModelPath;
+        private string _ocrModelPath;
 
         public PlateOCRService(string detectorModelPath, string ocrModelPath)
         {
-            detectorSession =  LoadModelFromAssets(detectorModelPath).Result;
-            ocrSession = LoadModelFromAssets(ocrModelPath).Result;
+            _detectorModelPath = detectorModelPath;
+            _ocrModelPath = ocrModelPath;
+        }
+        public async Task InitializeAsync()
+        {
+            detectorSession = await LoadModelFromAssets(_detectorModelPath);
+            ocrSession = await LoadModelFromAssets(_ocrModelPath);
         }
         public async Task<InferenceSession> LoadModelFromAssets(string fileName)
         {
@@ -30,20 +40,22 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return new InferenceSession(memoryStream.ToArray()); // Load model from byte[]
         }
 
-        public async Task<SKBitmap> LoadAndResizeAsync(Stream imageStream, int width, int height)
+        public async Task<SKBitmap> LoadAndResizeAsync(int width, int height,
+            Stream? imageStream = null, SKBitmap? image = null)
         {
 
+            if(image == null)
+                image = SKBitmap.Decode(imageStream);
 
-            var original = SKBitmap.Decode(imageStream);
-
-            if (original == null)
+            if (image == null)
                 throw new Exception("Failed to decode image from asset: " + imageStream);
 
-            return original.Resize(new SKImageInfo(width, height), SKSamplingOptions.Default);
+            return image.Resize(new SKImageInfo(width, height), SKSamplingOptions.Default);
         }
 
         public SKBitmap Crop(SKBitmap image, SKRectI cropRect)
         {
+
             int x1 = Math.Min(cropRect.Left, cropRect.Right);
             int y1 = Math.Min(cropRect.Top, cropRect.Bottom);
             int x2 = Math.Max(cropRect.Left, cropRect.Right);
@@ -161,24 +173,17 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             using var results = detectorSession.Run(inputs);
             var output = results.First().AsTensor<float>();
-           // Console.WriteLine($"OCR Output shape: {string.Join(" x ", output.Dimensions.ToArray())}");
             var boxes = new List<SKRectI>();
             int numDetections = output.Dimensions[0];
             for (int i = 0; i < numDetections; i++)
             {
-                float confidence = output[i, 4];
-
+                float confidence = output[i, 6];
                 if (confidence > 0.5f)
                 {
-                    float cx = output[i, 0] * image.Width;
-                    float cy = output[i, 1] * image.Height;
-                    float w = output[i, 2] * image.Width;
-                    float h = output[i, 3] * image.Height;
-
-                    int x1 = (int)(cx - w / 2);
-                    int y1 = (int)(cy - h / 2);
-                    int x2 = (int)(cx + w / 2);
-                    int y2 = (int)(cy + h / 2);
+                    int x1 = (int)Math.Round(output[i, 1]);
+                    int y1 = (int)Math.Round(output[i, 2]);
+                    int x2 = (int)Math.Round(output[i, 3]);
+                    int y2 = (int)Math.Round(output[i, 4]);
 
                     boxes.Add(new SKRectI(x1, y1, x2, y2));
                 }
@@ -263,10 +268,23 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return text;
         }
 
-        public async Task<(ImageSource image, string text)> Run(Stream imageStream)
+        public async Task<(ImageSource image, string text)> Run(SKBitmap imageSkBitmp)
         {
-            var resizedImage = await LoadAndResizeAsync(imageStream, 384, 384);
+                    var text = RecognizeText(imageSkBitmp);
+                    previewImage = ConvertSKBitmapToImageSource(imageSkBitmp);
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        OnPreviewFrameChanged?.Invoke(previewImage);
+                        OnTextChanged?.Invoke(text);
+                    });
+            return (null, "No plates detected");
+        }
+
+        public async Task<(ImageSource image, string text)> Run(SKBitmap image, bool istrue)
+        {
+            var resizedImage = await LoadAndResizeAsync(640, 640, null, image);
             var boxes = DetectPlates(resizedImage);
+            previewImage = ConvertSKBitmapToImageSource(resizedImage);
 
             foreach (var box in boxes)
             {
@@ -274,31 +292,16 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 if (plateImage != null)
                 {
                     var text = RecognizeText(plateImage);
-                    var image = ConvertSKBitmapToImageSource(plateImage);
-                    return (image, text);
-
+                    var imageAfterConv = ConvertSKBitmapToImageSource(plateImage);
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        OnTextChanged?.Invoke(text);
+                        OnPreviewFrameChanged?.Invoke(imageAfterConv);
+                    });
+                    return (imageAfterConv, text);
                 }
             }
             return (null, "No plates detected");
-        }
-        public static ImageSource TensorToImageSource(byte[] tensorData, int width, int height)
-        {
-            // Create grayscale bitmap
-            var bitmap = new SKBitmap(width, height, SKColorType.Gray8, SKAlphaType.Opaque);
-
-            // Fill bitmap pixel buffer
-            var pixels = bitmap.GetPixelSpan();
-            if (tensorData.Length != pixels.Length)
-                throw new Exception("Tensor data size does not match bitmap dimensions.");
-
-            tensorData.CopyTo(pixels);
-
-            // Convert to MAUI ImageSource
-            using var image = SKImage.FromBitmap(bitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            using var stream = new MemoryStream(data.ToArray());
-
-            return ImageSource.FromStream(() => new MemoryStream(stream.ToArray()));
         }
 
         public static DenseTensor<byte> PrepareGrayscaleTensor(SKBitmap croppedPlate, int width = 140, int height = 70)

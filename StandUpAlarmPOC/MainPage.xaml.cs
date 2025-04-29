@@ -13,6 +13,7 @@ namespace StandUpAlarmPOC
         private readonly ICamera _cameraService;
         private IDisposable _frameCaptureDisposable;
         private IImageProcessing _imageProcessor;
+
         public MainPage(ICamera cameraService, IImageProcessing imageProcessing)
         {
             InitializeComponent();
@@ -70,12 +71,12 @@ namespace StandUpAlarmPOC
         {
             try
             {
-                await Task.Run(async () =>
+                 Task.Run(async () =>
                 {
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         await ProcessFrame();
-                        await Task.Delay(300); // 0.2 seconds
+                        await Task.Delay(6500); // 0.2 seconds
                     }
                 }, cancellationToken);
             }
@@ -108,12 +109,13 @@ namespace StandUpAlarmPOC
                 using var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
                 memoryStream.Seek(0, SeekOrigin.Begin); // rewind to start
-                (img, txt) = await _imageProcessor.ProcessUploadedImage(memoryStream);
+                                                        //   (img, txt) = await _imageProcessor.ProcessUploadedImage(memoryStream);
+                (img, txt)  = await _imageProcessor.ProcessUploadedImage(memoryStream, 
+                    img  =>ResultImage.Source = img,
+                    txt => DetectedText.Text = txt );
                 using (var fileStream = File.Create(filePath))
                 {
                     await stream.CopyToAsync(fileStream);
-
-
                 }
 
 

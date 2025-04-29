@@ -37,9 +37,17 @@ public static class MauiProgram
 #endif
         });
 #if ANDROID
+
+        builder.Services.AddSingleton<IImageProcessing, ImageProcessingService>();
         builder.Services.AddSingleton<ICamera>(sp => 
     new AndroidCameraService());
-        builder.Services.AddSingleton<IImageProcessing, ImageProcessingService>();
+
+
+#endif
+
+#if WINDOWS
+
+
 #endif
         return builder.Build();
 	}
