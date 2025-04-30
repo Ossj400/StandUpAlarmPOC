@@ -15,7 +15,6 @@ namespace StandUpAlarmPOC.Interfaces
         Task EnsureCaptureSessionAsync();
         Task OpenCameraAsync();
         Task CloseCameraAsync();
-
-
+        Task EnsureCaptureSessionAsyncNew();
     }
 }

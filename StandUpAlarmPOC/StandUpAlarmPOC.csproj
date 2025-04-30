@@ -23,7 +23,7 @@
 		<ApplicationTitle>StandUpAlarmPOC</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>ossj.ossj.standupalarmpoc</ApplicationId>
+		<ApplicationId>com.companyname.standupalarmpoc</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>

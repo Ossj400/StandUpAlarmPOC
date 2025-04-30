@@ -13,6 +13,10 @@ using Java.Nio;
 using Android.Widget;
 using Android.Content.PM;
 using Android.Views;
+using Java.Lang;
+using Byte = Java.Lang.Byte;
+using Exception = System.Exception;
+using Android.Hardware.Camera2.Params;
 [assembly: Dependency(typeof(AndroidCameraService))]
 namespace StandUpAlarmPOC.Platforms.Android.Services
 {
@@ -101,12 +105,18 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
         public async Task<Stream> CaptureFrameAsync()
         {
-            await EnsureCaptureSessionAsync();
+            await EnsureCaptureSessionAsyncNew();
 
             try
             {
                 var captureRequest = _cameraDevice.CreateCaptureRequest(CameraTemplate.StillCapture);
+
                 captureRequest.AddTarget(_imageReader.Surface);
+                captureRequest.Set(CaptureRequest.ControlMode, new Integer((int)ControlMode.Auto));
+                captureRequest.Set(CaptureRequest.ControlAfMode, new Integer((int)ControlAFMode.ContinuousPicture));
+                captureRequest.Set(CaptureRequest.ControlAeMode, new Integer((int)ControlAEMode.On));
+                captureRequest.Set(CaptureRequest.JpegOrientation, new Integer(0));
+                captureRequest.Set(CaptureRequest.JpegQuality, new Byte((sbyte)100));
 
                 var captureTcs = new TaskCompletionSource<bool>();
                 var imageTcs = new TaskCompletionSource<Stream>();
@@ -126,7 +136,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 );
 
                 await captureTcs.Task;
-                return await imageTcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
+                return await imageTcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1200));
             }
             catch (Exception ex)
             {
@@ -178,7 +188,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             await _sessionLock.WaitAsync();
             try
             {
-                var imageReader = ImageReader.NewInstance(1920, 1080, ImageFormatType.Jpeg, 2);
+                var imageReader = ImageReader.NewInstance(4080, 3072, ImageFormatType.Jpeg, 2);
                 var surfaces = new List<Surface> { imageReader.Surface };
                 var tcs = new TaskCompletionSource<bool>();
 
@@ -195,7 +205,53 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                     _backgroundHandler
                 );
 
-                if (!await tcs.Task.WaitAsync(TimeSpan.FromSeconds(3)))
+                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1200)))
+                    throw new TimeoutException("Session creation timed out");
+            }
+            finally
+            {
+                _sessionLock.Release();
+            }
+        }
+        public async Task EnsureCaptureSessionAsyncNew()
+        {
+            if (_captureSession != null) return;
+
+            await _sessionLock.WaitAsync();
+            try
+            {
+                var imageReader = ImageReader.NewInstance(4080, 3072, ImageFormatType.Jpeg, 2);
+                var surfaces = new List<Surface> { imageReader.Surface };
+                var tcs = new TaskCompletionSource<bool>();
+
+                // Wrap the surfaces into OutputConfigurations
+                var outputConfigs = surfaces.Select(surface => new OutputConfiguration(surface)).ToList();
+
+                // Create a callback that sets up the session
+                var sessionCallback = new CaptureSessionCallback(
+                    tcs,
+                    session =>
+                    {
+                        _captureSession = session;
+                        _imageReader = imageReader;
+                    }
+                );
+
+                // Use a custom executor that wraps the background handler
+                var executor = new HandlerExecutor(_backgroundHandler.Looper);
+
+                // Create the session configuration
+                var sessionConfig = new SessionConfiguration(
+                    (int)SessionType.Regular,
+                    outputConfigs,
+                    executor,
+                    sessionCallback
+                );
+
+                // Create the capture session using the new API
+                _cameraDevice.CreateCaptureSession(sessionConfig);
+
+                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(100)))
                     throw new TimeoutException("Session creation timed out");
             }
             finally
@@ -252,7 +308,20 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 CaptureFailed?.Invoke(this, EventArgs.Empty);
             }
         }
+        internal class HandlerExecutor : Java.Lang.Object, Java.Util.Concurrent.IExecutor
+        {
+            private readonly Handler _handler;
 
+            public HandlerExecutor(Looper looper)
+            {
+                _handler = new Handler(looper);
+            }
+
+            public void Execute(Java.Lang.IRunnable command)
+            {
+                _handler.Post(command);
+            }
+        }
         internal class CameraStateCallback : CameraDevice.StateCallback
         {
             private readonly TaskCompletionSource<CameraDevice> _tcs;

@@ -76,7 +76,7 @@ namespace StandUpAlarmPOC
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         await ProcessFrame();
-                        await Task.Delay(6500); // 0.2 seconds
+                        await Task.Delay(100); // 0.1 seconds
                     }
                 }, cancellationToken);
             }
@@ -99,7 +99,7 @@ namespace StandUpAlarmPOC
             try
             {
                 await _cameraService.OpenCameraAsync();
-                await _cameraService.EnsureCaptureSessionAsync();
+                await _cameraService.EnsureCaptureSessionAsyncNew();
                 using var stream = await _cameraService.CaptureFrameAsync();
 
                 var fileName = $"frame_{DateTime.Now:yyyyMMdd_HHmmssfff}.jpg";

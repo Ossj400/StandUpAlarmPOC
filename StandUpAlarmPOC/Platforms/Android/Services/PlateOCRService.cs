@@ -158,7 +158,39 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             return boxes;
         }
 
-        public string DecodeWithoutCollapse(Tensor<float> output)
+            public string DecodeWithoutCollapse(Tensor<float> output)
+            {
+                string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
+                var flat = output.ToArray();
+
+                int vocabSize = alphabet.Length;
+                int timeSteps = flat.Length / vocabSize;
+
+                var result = new List<char>();
+
+                for (int t = 0; t < timeSteps; t++)
+                {
+                    // this float.MinValue is big issue but now fixing the thing with spacing 
+                    float bestScore = float.MinValue;
+                    int bestIndex = 0;
+
+                    for (int c = 0; c < vocabSize; c++)
+                    {
+                        float score = flat[t * vocabSize + c];
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestIndex = c;
+                        }
+                    }
+
+                    if (alphabet[bestIndex] != '_') // just skip blanks
+                        result.Add(alphabet[bestIndex]);
+                }
+
+                return new string(result.ToArray());
+            }
+        public (string top1, string top2, string top3) DecodeTop3Variants(Tensor<float> output)
         {
             string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
             var flat = output.ToArray();
@@ -166,29 +198,38 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             int vocabSize = alphabet.Length;
             int timeSteps = flat.Length / vocabSize;
 
-            var result = new List<char>();
+            var result1 = new List<char>();
+            var result2 = new List<char>();
+            var result3 = new List<char>();
 
             for (int t = 0; t < timeSteps; t++)
             {
-                // this float.MinValue is big issue but now fixing the thing with spacing 
-                float bestScore = float.MinValue;
-                int bestIndex = 0;
+                // Get top 3 character indices by score at this timestep
+                var scores = new List<(float score, int index)>();
 
                 for (int c = 0; c < vocabSize; c++)
                 {
                     float score = flat[t * vocabSize + c];
-                    if (score > bestScore)
-                    {
-                        bestScore = score;
-                        bestIndex = c;
-                    }
+                    scores.Add((score, c));
                 }
 
-                if (alphabet[bestIndex] != '_') // just skip blanks
-                    result.Add(alphabet[bestIndex]);
+                var top3 = scores
+                    .OrderByDescending(s => s.score)
+                    .Take(3)
+                    .Select(s => s.index)
+                    .ToArray();
+
+                // Skip blanks (e.g., '_') in all results
+                if (alphabet[top3[0]] != '_') result1.Add(alphabet[top3[0]]);
+                if (alphabet[top3[1]] != '_') result2.Add(alphabet[top3[1]]);
+                if (alphabet[top3[2]] != '_') result3.Add(alphabet[top3[2]]);
             }
 
-            return new string(result.ToArray());
+            return (
+                new string(result1.ToArray()),
+                new string(result2.ToArray()),
+                new string(result3.ToArray())
+            );
         }
         public string RecognizeText(SKBitmap croppedPlate)
         {
@@ -201,7 +242,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             using var results = ocrSession.Run(inputs);
             var output = results.First().AsTensor<float>();
-
+            //var decodes = DecodeTop3Variants(output);
             return DecodeWithoutCollapse(output);
         }
 
@@ -214,7 +255,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 OnPreviewFrameChanged?.Invoke(previewImage);
                 OnTextChanged?.Invoke(text);
             });
-            return (null, "No plates detected");
+            return (previewImage, text);
         }
 
         public static DenseTensor<byte> PrepareGrayscaleTensor(SKBitmap croppedPlate, int width = 140, int height = 70)

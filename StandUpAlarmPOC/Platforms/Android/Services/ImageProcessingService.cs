@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -42,11 +43,16 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
         {
             try
             {
+                MemoryStream memoryStream = new MemoryStream();
+                await imageStream.CopyToAsync(memoryStream);
+                memoryStream.Seek(0, SeekOrigin.Begin);
+
+
                 // Replace with your actual path if needed
-                bool useOnDebug = true;
-                MemoryStream memoryStream;
-                ImageSource imageRet;
-                string text;
+                bool useOnDebug = false;
+
+                ImageSource imageRet = null;
+                string text = "";
 
                 if (useOnDebug)
                 {
@@ -100,38 +106,23 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                         memoryStream = new MemoryStream();
                         await fileStream.CopyToAsync(memoryStream);
                         memoryStream.Seek(0, SeekOrigin.Begin);
+                        RunOCRProcess(memoryStream, onFrameUpdate, txtUpdate);
+                        /* var croppedPlates = DetectAndCropFullResolutionPlates(memoryStream);
 
-                        // Create tiles from the image stream
-                        // var tiles = CreateOverlappingTilesListFromStream(memoryStream, 1280);
-                        var croppedPlates = DetectAndCropFullResolutionPlates(memoryStream);
-
-                        foreach (var plateCrop in croppedPlates)
-                        {
-                          //  var croppedStream = ConvertSKBitmapToStream(plateCrop);
-                            (imageRet, text) = await ocr.Run(plateCrop);
-                            ocr.OnPreviewFrameChanged = onFrameUpdate;
-                            ocr.OnTextChanged = txtUpdate;
-                        }
-
-                       /* var detections = CropDetectedPlates(memoryStream, 0.1f);
-                        foreach (var tile in detections)
-                        {
-                            ocr.OnPreviewFrameChanged = onFrameUpdate;
-                            ocr.OnTextChanged = txtUpdate;
-                            (imageRet, text) = ocr.Run(tile).Result;
-                        }
-                   */
+                         foreach (var plateCrop in croppedPlates)
+                         {
+                             (imageRet, text) = await ocr.Run(plateCrop);
+                             ocr.OnPreviewFrameChanged = onFrameUpdate;
+                             ocr.OnTextChanged = txtUpdate;
+                         }
+                        */
                     }
-                    imageStream = await FileSystem.OpenAppPackageFileAsync("plate.png");
-                     memoryStream = new MemoryStream();
-                    await imageStream.CopyToAsync(memoryStream);
-                   memoryStream.Seek(0, SeekOrigin.Begin);
-                   ocr.OnPreviewFrameChanged = onFrameUpdate;
-
-                   // (imageRet, text) = await ocr.Run(memoryStream);
                 }
-               // else
-                    // (imageRet, text) = await ocr.Run(imageStream);
+                else
+                {
+                    await RunOCRProcess(memoryStream, onFrameUpdate, txtUpdate);
+                }
+
 
                 return (null, null);
             }
@@ -142,14 +133,26 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             }
         }
-        public MemoryStream ConvertSKBitmapToStream(SKBitmap bitmap)
+        public async Task RunOCRProcess(MemoryStream memoryStream, Action<ImageSource> onFrameUpdate, Action<string> txtUpdate)
         {
-            using var image = SKImage.FromBitmap(bitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            var stream = new MemoryStream();
-            data.SaveTo(stream);
-            stream.Seek(0, SeekOrigin.Begin);
-            return stream;
+            string text ="";
+            ImageSource imageRet = null;
+            try
+            {
+                var croppedPlates = DetectAndCropFullResolutionPlates(memoryStream);
+
+                foreach (var plateCrop in croppedPlates)
+                {
+                    (imageRet, text) = await ocr.Run(plateCrop);
+                    ocr.OnPreviewFrameChanged = onFrameUpdate;
+                    ocr.OnTextChanged = txtUpdate;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"OCR error: {ex.Message}");
+            }
+
         }
         public List<SKBitmap> DetectAndCropFullResolutionPlates(MemoryStream highResStream, float detectionResizeWidth = 1280f, int tileSize = 640, float overlap = 0.25f, float paddingPercent = 0.1f)
         {
