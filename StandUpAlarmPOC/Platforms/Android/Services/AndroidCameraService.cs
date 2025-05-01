@@ -17,6 +17,7 @@ using Java.Lang;
 using Byte = Java.Lang.Byte;
 using Exception = System.Exception;
 using Android.Hardware.Camera2.Params;
+using System.Diagnostics;
 [assembly: Dependency(typeof(AndroidCameraService))]
 namespace StandUpAlarmPOC.Platforms.Android.Services
 {
@@ -112,11 +113,32 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 var captureRequest = _cameraDevice.CreateCaptureRequest(CameraTemplate.StillCapture);
 
                 captureRequest.AddTarget(_imageReader.Surface);
-                captureRequest.Set(CaptureRequest.ControlMode, new Integer((int)ControlMode.Auto));
-                captureRequest.Set(CaptureRequest.ControlAfMode, new Integer((int)ControlAFMode.ContinuousPicture));
-                captureRequest.Set(CaptureRequest.ControlAeMode, new Integer((int)ControlAEMode.On));
-                captureRequest.Set(CaptureRequest.JpegOrientation, new Integer(0));
+                captureRequest.Set(CaptureRequest.ControlMode, (int)ControlMode.Auto);
+                captureRequest.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.ContinuousPicture);
+                captureRequest.Set(CaptureRequest.ControlAeMode, (int)ControlAEMode.On);
                 captureRequest.Set(CaptureRequest.JpegQuality, new Byte((sbyte)100));
+
+                var cameraCharacteristics = _cameraManager.GetCameraCharacteristics(_cameraManager.GetCameraIdList()[0]);
+                var sensorOrientation = cameraCharacteristics.Get(CameraCharacteristics.SensorOrientation).JavaCast<Java.Lang.Integer>().IntValue();
+                var lensFacing = cameraCharacteristics.Get(CameraCharacteristics.LensFacing).JavaCast<Java.Lang.Integer>().IntValue();
+                bool isFrontFacing = lensFacing == (int)LensFacing.Front;
+
+                var rotation = Platform.CurrentActivity.WindowManager.DefaultDisplay.Rotation;
+
+                int jpegOrientation;
+                if (isFrontFacing)
+                {
+                    jpegOrientation = (sensorOrientation + rotationDegrees(rotation)) % 360;
+                    jpegOrientation = (360 - jpegOrientation) % 360; // compensate the mirror
+                }
+                else
+                {
+                    jpegOrientation = (sensorOrientation - rotationDegrees(rotation) + 360) % 360;
+                }
+                int forcedOrientation = (sensorOrientation + 90) % 360;
+
+                captureRequest.Set(CaptureRequest.JpegOrientation, forcedOrientation);
+
 
                 var captureTcs = new TaskCompletionSource<bool>();
                 var imageTcs = new TaskCompletionSource<Stream>();
@@ -144,7 +166,17 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 throw new Exception("Capture failed", ex);
             }
         }
-
+        private int rotationDegrees(SurfaceOrientation rotation)
+        {
+            return rotation switch
+            {
+                SurfaceOrientation.Rotation0 => 0,
+                SurfaceOrientation.Rotation90 => 90,
+                SurfaceOrientation.Rotation180 => 180,
+                SurfaceOrientation.Rotation270 => 270,
+                _ => 0,
+            };
+        }
         public async Task StopCameraAsync()
         {
             try
