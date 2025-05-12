@@ -37,6 +37,7 @@ public static class MauiProgram
 #endif
         });
 #if ANDROID
+       // builder.UseMauiApp<App>().UseMauiCommunityToolkit();
 
         builder.Services.AddSingleton<IImageProcessing, ImageProcessingService>();
         builder.Services.AddSingleton<ICamera>(sp => 

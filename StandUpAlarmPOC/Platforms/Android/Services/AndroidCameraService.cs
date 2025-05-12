@@ -14,10 +14,15 @@ using Android.Widget;
 using Android.Content.PM;
 using Android.Views;
 using Java.Lang;
-using Byte = Java.Lang.Byte;
 using Exception = System.Exception;
 using Android.Hardware.Camera2.Params;
 using System.Diagnostics;
+using Android.Provider;
+using Application = Android.App.Application;
+using Size = Android.Util.Size;
+using Bumptech.Glide;
+using Rect = Android.Graphics.Rect;
+
 [assembly: Dependency(typeof(AndroidCameraService))]
 namespace StandUpAlarmPOC.Platforms.Android.Services
 {
@@ -106,21 +111,52 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
         public async Task<Stream> CaptureFrameAsync()
         {
-            await EnsureCaptureSessionAsyncNew();
 
             try
             {
-                var captureRequest = _cameraDevice.CreateCaptureRequest(CameraTemplate.StillCapture);
+                var cameraIds = _cameraManager.GetCameraIdList();
 
-                captureRequest.AddTarget(_imageReader.Surface);
-                captureRequest.Set(CaptureRequest.ControlMode, (int)ControlMode.Auto);
-                captureRequest.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.ContinuousPicture);
-                captureRequest.Set(CaptureRequest.ControlAeMode, (int)ControlAEMode.On);
-                captureRequest.Set(CaptureRequest.JpegQuality, new Byte((sbyte)100));
+                foreach (var id in cameraIds)
+                {
+                    var chars = _cameraManager.GetCameraCharacteristics(id);
+                    var facing = chars.Get(CameraCharacteristics.LensFacing).JavaCast<Java.Lang.Integer>()?.IntValue();
 
-                var cameraCharacteristics = _cameraManager.GetCameraCharacteristics(_cameraManager.GetCameraIdList()[0]);
-                var sensorOrientation = cameraCharacteristics.Get(CameraCharacteristics.SensorOrientation).JavaCast<Java.Lang.Integer>().IntValue();
-                var lensFacing = cameraCharacteristics.Get(CameraCharacteristics.LensFacing).JavaCast<Java.Lang.Integer>().IntValue();
+                    // With this corrected code:
+                    var focalLengthsObject = chars.Get(CameraCharacteristics.LensInfoAvailableFocalLengths);
+                    var focalLengths = focalLengthsObject is Java.Lang.Object javaObject
+                        ? javaObject.ToArray<float>()
+                        : null;
+
+                    var isBackCamera = facing == (int)LensFacing.Back;
+
+                        var capabilitiesObject = chars.Get(CameraCharacteristics.RequestAvailableCapabilities);
+                        var capabilities = capabilitiesObject is Java.Lang.Object javaObjectzz
+                            ? javaObjectzz.ToArray<int>()
+                            : null;
+
+
+                    if (capabilities != null)
+                    {
+                        foreach (var cap in capabilities)
+                        {
+                            var name = GetCapabilityName(cap);
+                        }
+                    }
+                } 
+
+                await EnsureCaptureSessionAsyncNew(); // make sure session + _imageReader is ready
+                //var focusLocked = await LockAutoFocusAsync();
+               // if (!focusLocked)
+               //     throw new TimeoutException("Autofocus did not lock in time");
+
+                // ✅ Step 2: Capture the image
+                var captureTcs = new TaskCompletionSource<bool>();
+                var imageTcs = new TaskCompletionSource<Stream>();
+
+                var characteristics = _cameraManager.GetCameraCharacteristics(_cameraDevice.Id);
+
+                var sensorOrientation = characteristics.Get(CameraCharacteristics.SensorOrientation).JavaCast<Java.Lang.Integer>().IntValue();
+                var lensFacing = characteristics.Get(CameraCharacteristics.LensFacing).JavaCast<Java.Lang.Integer>().IntValue();
                 bool isFrontFacing = lensFacing == (int)LensFacing.Front;
 
                 var rotation = Platform.CurrentActivity.WindowManager.DefaultDisplay.Rotation;
@@ -135,13 +171,41 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 {
                     jpegOrientation = (sensorOrientation - rotationDegrees(rotation) + 360) % 360;
                 }
-                int forcedOrientation = (sensorOrientation + 90) % 360;
-
-                captureRequest.Set(CaptureRequest.JpegOrientation, forcedOrientation);
+                int forcedOrientation = (sensorOrientation + 0) % 360;
 
 
-                var captureTcs = new TaskCompletionSource<bool>();
-                var imageTcs = new TaskCompletionSource<Stream>();
+
+                var captureRequestBuilder = _cameraDevice.CreateCaptureRequest(CameraTemplate.StillCapture);
+                captureRequestBuilder.AddTarget(_imageReader.Surface);
+                captureRequestBuilder.Set(CaptureRequest.ControlMode, (int)ControlMode.Auto);
+                //captureRequestBuilder.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.Auto);
+                captureRequestBuilder.Set(CaptureRequest.ControlAeMode, (int)ControlAEMode.On);
+                captureRequestBuilder.Set(CaptureRequest.ControlAeLock, true);
+                captureRequestBuilder.Set(CaptureRequest.ControlAwbMode, (int)ControlAwbMode.Auto);
+                captureRequestBuilder.Set(CaptureRequest.JpegOrientation, jpegOrientation);
+                captureRequestBuilder.Set(CaptureRequest.NoiseReductionMode, 2);
+               // captureRequestBuilder.Set(CaptureRequest.ControlAfTrigger, (int)ControlAFTrigger.Start);
+                captureRequestBuilder.Set(CaptureRequest.LensOpticalStabilizationMode, 1);
+                captureRequestBuilder.Set(CaptureRequest.EdgeMode,1);
+
+                captureRequestBuilder.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.Off);
+                captureRequestBuilder.Set(CaptureRequest.LensFocusDistance, 0.0f); // 0 = infinity
+
+                ApplyZoomAndFocus(captureRequestBuilder, 1f);
+                var captureRequest = captureRequestBuilder.Build();
+                var keys = captureRequest.Keys;
+                //foreach (var key in keys)
+                 //   Console.WriteLine($"CaptureRequest Key: {key.ToString()}");
+
+                var modes = characteristics.Get(CameraCharacteristics.ControlAvailableVideoStabilizationModes)
+         is Java.Lang.Object javaObjectz
+                            ? javaObjectz.ToArray<int>()
+                            : null;
+
+                foreach (var mode in modes)
+                {
+                 //   Console.WriteLine($"Video Stabilization Mode:  {ControlVideoStabilizationMode.On} is On and my is :{mode}");
+                }
 
                 using var captureCallback = new CameraCaptureCallback();
                 using var imageListener = new ImageAvailableListener();
@@ -151,19 +215,111 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
                 _imageReader.SetOnImageAvailableListener(imageListener, _backgroundHandler);
 
-                _captureSession.Capture(
-                    captureRequest.Build(),
-                    captureCallback,
-                    _backgroundHandler
-                );
+                _captureSession.Capture(captureRequest, captureCallback, _backgroundHandler);
 
                 await captureTcs.Task;
-                return await imageTcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1200));
+                return await imageTcs.Task;
             }
             catch (Exception ex)
             {
                 await CloseCameraAsync();
                 throw new Exception("Capture failed", ex);
+            }
+        }
+        public void ApplyZoomAndFocus(CaptureRequest.Builder builder, float zoomLevel)
+        {
+            var characteristics = _cameraManager.GetCameraCharacteristics(_cameraDevice.Id);
+
+            // Get the sensor active array size (full sensor area)
+            var sensorRect = (Rect)characteristics.Get(CameraCharacteristics.SensorInfoActiveArraySize);
+
+            var maxZoom = characteristics.Get(CameraCharacteristics.ScalerAvailableMaxDigitalZoom).JavaCast<Java.Lang.Float>().FloatValue();
+
+            // Clamp zoom level to valid range
+            zoomLevel = System.Math.Max(1f, System.Math.Min(zoomLevel, maxZoom));
+
+            // Calculate zoom crop rectangle
+            int centerX = sensorRect.CenterX();
+            int centerY = sensorRect.CenterY();
+            int deltaX = (int)(sensorRect.Width() / (2 * zoomLevel));
+            int deltaY = (int)(sensorRect.Height() / (2 * zoomLevel));
+
+            var zoomRect = new Rect(
+                centerX - deltaX,
+                centerY - deltaY,
+                centerX + deltaX,
+                centerY + deltaY
+            );
+
+            // Apply digital zoom
+            builder.Set(CaptureRequest.ScalerCropRegion, zoomRect);
+
+            // Set autofocus region inside the zoomRect
+            var afRegion = new MeteringRectangle(zoomRect, MeteringRectangle.MeteringWeightMax);
+            builder.Set(CaptureRequest.LensFocusDistance, 0.0f);
+
+        }
+        private string GetCapabilityName(int capability)
+        {
+            return capability switch
+            {
+                0 => "BACKWARD_COMPATIBLE",
+                1 => "MANUAL_SENSOR",
+                2 => "MANUAL_POST_PROCESSING",
+                3 => "RAW",
+                4 => "PRIVATE_REPROCESSING",
+                5 => "READ_SENSOR_SETTINGS",
+                6 => "BURST_CAPTURE",
+                7 => "YUV_REPROCESSING",
+                8 => "DEPTH_OUTPUT",
+                9 => "CONSTRAINED_HIGH_SPEED_VIDEO",
+                10 => "MOTION_TRACKING",
+                11 => "LOGICAL_MULTI_CAMERA",
+                12 => "MONOCHROME",
+                13 => "SECURE_IMAGE_DATA",
+                14 => "SYSTEM_CAMERA",
+                15 => "ULTRA_HIGH_RESOLUTION_SENSOR",
+                16 => "REMOSAIC_REPROCESSING",
+                17 => "OEM_EXTENSIONS",
+                _ => $"Unknown ({capability})"
+            };
+        }
+        private async Task<bool> LockAutoFocusAsync()
+        {
+            try
+            {
+
+
+                var tcs = new TaskCompletionSource<bool>();
+
+                var afRequestBuilder = _cameraDevice.CreateCaptureRequest(CameraTemplate.Preview);
+                afRequestBuilder.AddTarget(_imageReader.Surface);
+                afRequestBuilder.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.Auto);
+                afRequestBuilder.Set(CaptureRequest.ControlAfTrigger, (int)ControlAFTrigger.Start);
+
+                var focusCallback = new CameraCaptureCallback();
+                focusCallback.CaptureCompleted += (s, e) =>
+                {
+                    var afStateObj = e.CaptureResult.Get(CaptureResult.ControlAfState);
+                    if (afStateObj is Java.Lang.Integer afState)
+                    {
+                        if (afState.IntValue() == (int)ControlAFState.FocusedLocked ||
+                            afState.IntValue() == (int)ControlAFState.NotFocusedLocked)
+                        {
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                };
+
+                _captureSession.Capture(afRequestBuilder.Build(), focusCallback, _backgroundHandler);
+
+                // Wait up to 1.5 seconds for focus to lock
+                return await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1500));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
             }
         }
         private int rotationDegrees(SurfaceOrientation rotation)
@@ -220,7 +376,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             await _sessionLock.WaitAsync();
             try
             {
-                var imageReader = ImageReader.NewInstance(4080, 3072, ImageFormatType.Jpeg, 2);
+                var imageReader = ImageReader.NewInstance(4080, 3072, ImageFormatType.Jpeg, 1);
                 var surfaces = new List<Surface> { imageReader.Surface };
                 var tcs = new TaskCompletionSource<bool>();
 
@@ -237,7 +393,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                     _backgroundHandler
                 );
 
-                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1200)))
+                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(400)))
                     throw new TimeoutException("Session creation timed out");
             }
             finally
@@ -247,43 +403,32 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
         }
         public async Task EnsureCaptureSessionAsyncNew()
         {
-            if (_captureSession != null) return;
+            if (_captureSession != null)
+                return;
 
             await _sessionLock.WaitAsync();
             try
             {
-                var imageReader = ImageReader.NewInstance(4080, 3072, ImageFormatType.Jpeg, 2);
-                var surfaces = new List<Surface> { imageReader.Surface };
+                var characteristics = _cameraManager.GetCameraCharacteristics(_cameraDevice.Id);
+                var streamConfigMap = (StreamConfigurationMap)characteristics.Get(CameraCharacteristics.ScalerStreamConfigurationMap);
+                Size[] jpegSizes = streamConfigMap.GetOutputSizes((int)ImageFormatType.Jpeg);
+                Size maxSize = jpegSizes.OrderByDescending(s => s.Width * s.Height).First();
+
+                // ✅ Create ImageReader once here
+                _imageReader = ImageReader.NewInstance(maxSize.Width, maxSize.Height, ImageFormatType.Jpeg, 1);
+
+                var surfaces = new List<Surface> { _imageReader.Surface };
+
                 var tcs = new TaskCompletionSource<bool>();
 
-                // Wrap the surfaces into OutputConfigurations
-                var outputConfigs = surfaces.Select(surface => new OutputConfiguration(surface)).ToList();
+                var sessionCallback = new CaptureSessionCallback(tcs, session =>
+                {
+                    _captureSession = session;
+                });
 
-                // Create a callback that sets up the session
-                var sessionCallback = new CaptureSessionCallback(
-                    tcs,
-                    session =>
-                    {
-                        _captureSession = session;
-                        _imageReader = imageReader;
-                    }
-                );
+                _cameraDevice.CreateCaptureSession(surfaces, sessionCallback, _backgroundHandler);
 
-                // Use a custom executor that wraps the background handler
-                var executor = new HandlerExecutor(_backgroundHandler.Looper);
-
-                // Create the session configuration
-                var sessionConfig = new SessionConfiguration(
-                    (int)SessionType.Regular,
-                    outputConfigs,
-                    executor,
-                    sessionCallback
-                );
-
-                // Create the capture session using the new API
-                _cameraDevice.CreateCaptureSession(sessionConfig);
-
-                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(100)))
+                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1500)))
                     throw new TimeoutException("Session creation timed out");
             }
             finally
@@ -291,7 +436,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 _sessionLock.Release();
             }
         }
-
 
         // Helper class for image capture
         internal class CaptureSessionCallback : CameraCaptureSession.StateCallback
@@ -319,7 +463,27 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 _tcs.TrySetException(new Exception("Session configuration failed"));
             }
         }
-        internal class CameraCaptureCallback : CameraCaptureSession.CaptureCallback
+        public class CameraCaptureCallback : CameraCaptureSession.CaptureCallback
+        {
+            public event EventHandler<CaptureCompletedEventArgs> CaptureCompleted;
+
+            public override void OnCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result)
+            {
+                base.OnCaptureCompleted(session, request, result);
+                CaptureCompleted?.Invoke(this, new CaptureCompletedEventArgs(result));
+            }
+        }
+
+        public class CaptureCompletedEventArgs : EventArgs
+        {
+            public TotalCaptureResult CaptureResult { get; }
+
+            public CaptureCompletedEventArgs(TotalCaptureResult result)
+            {
+                CaptureResult = result;
+            }
+        }
+        internal class CameraCaptureCallback2 : CameraCaptureSession.CaptureCallback
         {
             public event EventHandler CaptureCompleted;
             public event EventHandler CaptureFailed;
@@ -391,13 +555,50 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                     using var buffer = image.GetPlanes()[0].Buffer;
                     var bytes = new byte[buffer.Remaining()];
                     buffer.Get(bytes);
+
+                    SaveImageToMediaStore(bytes);
+
+
                     ImageAvailable?.Invoke(this, new MemoryStream(bytes));
+                   // image.Close();
+
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error capturing image: {ex.Message}");
                 }
             }
+            private void SaveImageToMediaStore(byte[] imageData)
+            {
+                var context = Platform.CurrentActivity ?? Application.Context;
+
+                var filename = $"photo_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.jpg";
+
+                var contentValues = new ContentValues();
+                contentValues.Put(MediaStore.IMediaColumns.DisplayName, filename);
+                contentValues.Put(MediaStore.IMediaColumns.MimeType, "image/jpeg");
+                contentValues.Put(MediaStore.IMediaColumns.RelativePath, "Pictures/Camera2App");
+
+                var uri = context.ContentResolver.Insert(MediaStore.Images.Media.ExternalContentUri, contentValues);
+
+                if (uri == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("Failed to create MediaStore entry.");
+                    return;
+                }
+
+                try
+                {
+                    using var outputStream = context.ContentResolver.OpenOutputStream(uri);
+                    outputStream.Write(imageData, 0, imageData.Length);
+                    outputStream.Flush();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error writing image: {ex}");
+                }
+            }
         }
+
     }
 }

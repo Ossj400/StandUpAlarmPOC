@@ -76,7 +76,7 @@ namespace StandUpAlarmPOC
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         await ProcessFrame();
-                        await Task.Delay(100); // 0.1 seconds
+                        await Task.Delay(200); // 0.1 seconds
                     }
                 }, cancellationToken);
             }
