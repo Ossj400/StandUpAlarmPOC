@@ -179,12 +179,11 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 captureRequestBuilder.AddTarget(_imageReader.Surface);
                 captureRequestBuilder.Set(CaptureRequest.ControlMode, (int)ControlMode.Auto);
                 //captureRequestBuilder.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.Auto);
-                captureRequestBuilder.Set(CaptureRequest.ControlAeMode, (int)ControlAEMode.On);
-                captureRequestBuilder.Set(CaptureRequest.ControlAeLock, true);
-                captureRequestBuilder.Set(CaptureRequest.ControlAwbMode, (int)ControlAwbMode.Auto);
+                //captureRequestBuilder.Set(CaptureRequest.ControlAeMode, (int)ControlAEMode.On);
+                //captureRequestBuilder.Set(CaptureRequest.ControlAeLock, true);
+                //captureRequestBuilder.Set(CaptureRequest.ControlAwbMode, (int)ControlAwbMode.Auto);
                 captureRequestBuilder.Set(CaptureRequest.JpegOrientation, jpegOrientation);
                 captureRequestBuilder.Set(CaptureRequest.NoiseReductionMode, 2);
-               // captureRequestBuilder.Set(CaptureRequest.ControlAfTrigger, (int)ControlAFTrigger.Start);
                 captureRequestBuilder.Set(CaptureRequest.LensOpticalStabilizationMode, 1);
                 captureRequestBuilder.Set(CaptureRequest.EdgeMode,1);
 
@@ -193,20 +192,6 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
                 ApplyZoomAndFocus(captureRequestBuilder, 1f);
                 var captureRequest = captureRequestBuilder.Build();
-                var keys = captureRequest.Keys;
-                //foreach (var key in keys)
-                 //   Console.WriteLine($"CaptureRequest Key: {key.ToString()}");
-
-                var modes = characteristics.Get(CameraCharacteristics.ControlAvailableVideoStabilizationModes)
-         is Java.Lang.Object javaObjectz
-                            ? javaObjectz.ToArray<int>()
-                            : null;
-
-                foreach (var mode in modes)
-                {
-                 //   Console.WriteLine($"Video Stabilization Mode:  {ControlVideoStabilizationMode.On} is On and my is :{mode}");
-                }
-
                 using var captureCallback = new CameraCaptureCallback();
                 using var imageListener = new ImageAvailableListener();
 
