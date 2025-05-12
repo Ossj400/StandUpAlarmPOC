@@ -120,7 +120,8 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 }
                 else
                 {
-                    await RunOCRProcess(memoryStream, onFrameUpdate, txtUpdate);
+                    var retVariables = await RunOCRProcess(memoryStream, onFrameUpdate, txtUpdate);
+                    return retVariables;
                 }
 
 
@@ -133,25 +134,26 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
             }
         }
-        public async Task RunOCRProcess(MemoryStream memoryStream, Action<ImageSource> onFrameUpdate, Action<string> txtUpdate)
+        public async Task<(ImageSource, string)> RunOCRProcess(MemoryStream memoryStream, Action<ImageSource> onFrameUpdate, Action<string> txtUpdate)
         {
             string text ="";
             ImageSource imageRet = null;
+            List<string> plates = new List<string>();
+
             try
             {
                 var croppedPlates = DetectAndCropFullResolutionPlates(memoryStream);
-
                 foreach (var plateCrop in croppedPlates)
                 {
                     (imageRet, text) = await ocr.Run(plateCrop);
-                    ocr.OnPreviewFrameChanged = onFrameUpdate;
-                    ocr.OnTextChanged = txtUpdate;
+                    plates.Add(text);
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"OCR error: {ex.Message}");
             }
+            return (imageRet, string.Join("|", plates) + "Counted: "+ plates.Count);
 
         }
         public List<SKBitmap> DetectAndCropFullResolutionPlates(MemoryStream highResStream, float detectionResizeWidth = 1280f, int tileSize = 640, float overlap = 0.25f, float paddingPercent = 0.1f)

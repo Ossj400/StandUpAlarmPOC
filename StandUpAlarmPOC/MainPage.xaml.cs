@@ -76,7 +76,7 @@ namespace StandUpAlarmPOC
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         await ProcessFrame();
-                        await Task.Delay(200); // 0.1 seconds
+                       // await Task.Delay(200); // 0.1 seconds
                     }
                 }, cancellationToken);
             }
@@ -98,6 +98,7 @@ namespace StandUpAlarmPOC
         {
             try
             {
+                var beginTime = DateTime.Now;
                 await _cameraService.OpenCameraAsync();
                 await _cameraService.EnsureCaptureSessionAsync();
                 using var stream = await _cameraService.CaptureFrameAsync();
@@ -108,23 +109,21 @@ namespace StandUpAlarmPOC
                 string txt = string.Empty;
                 using var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
-                memoryStream.Seek(0, SeekOrigin.Begin); // rewind to start
-                                                        //   (img, txt) = await _imageProcessor.ProcessUploadedImage(memoryStream);
+                memoryStream.Seek(0, SeekOrigin.Begin); 
+
                 (img, txt)  = await _imageProcessor.ProcessUploadedImage(memoryStream, 
                     img  =>ResultImage.Source = img,
                     txt => DetectedText.Text = txt );
-                using (var fileStream = File.Create(filePath))
-                {
-                    await stream.CopyToAsync(fileStream);
-                }
 
+                var processTime = (DateTime.Now- beginTime).Milliseconds;
 
                 // Optional: Display path in UI
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
-                    ResultImage.Source = img;
-                    DetectedText.Text = txt;
-                    CapturedFrameImage.Source = ImageSource.FromFile(filePath);
+                  //  ResultImage.Source = img;
+                    if(!string.IsNullOrEmpty(txt))
+                        DetectedText.Text = txt + " in " + processTime + "miliseconds";
+                  //  CapturedFrameImage.Source = ImageSource.FromFile(filePath);
                 });
 
             }

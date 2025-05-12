@@ -110,7 +110,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
             {
                 var cameraIds = _cameraManager.GetCameraIdList();
 
-                await EnsureCaptureSessionAsync();
+               // await EnsureCaptureSessionAsync();
                 var captureTcs = new TaskCompletionSource<bool>();
                 var imageTcs = new TaskCompletionSource<Stream>();
 
@@ -152,6 +152,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                 captureCallback.CaptureCompleted += (s, e) => captureTcs.TrySetResult(true);
                 imageListener.ImageAvailable += (s, stream) => imageTcs.TrySetResult(stream);
 
+           //     captureRequestBuilder.Set(CaptureRequest.LensFocusDistance, 0.0f); // 0 = infinity
                 _imageReader.SetOnImageAvailableListener(imageListener, _backgroundHandler);
 
                 _captureSession.Capture(captureRequest, captureCallback, _backgroundHandler);
@@ -234,8 +235,7 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
 
                 _cameraDevice.CreateCaptureSession(surfaces, sessionCallback, _backgroundHandler);
 
-                if (!await tcs.Task.WaitAsync(TimeSpan.FromMilliseconds(400)))
-                    throw new TimeoutException("Session creation timed out");
+                await tcs.Task;
             }
             finally
             {
@@ -328,11 +328,10 @@ namespace StandUpAlarmPOC.Platforms.Android.Services
                     var bytes = new byte[buffer.Remaining()];
                     buffer.Get(bytes);
 
-                    SaveImageToMediaStore(bytes);
-
+                  //  SaveImageToMediaStore(bytes);
 
                     ImageAvailable?.Invoke(this, new MemoryStream(bytes));
-                   // image.Close();
+                    image.Close();
 
                 }
                 catch (Exception ex)
