@@ -99,7 +99,7 @@ namespace StandUpAlarmPOC
             try
             {
                 await _cameraService.OpenCameraAsync();
-                await _cameraService.EnsureCaptureSessionAsyncNew();
+                await _cameraService.EnsureCaptureSessionAsync();
                 using var stream = await _cameraService.CaptureFrameAsync();
 
                 var fileName = $"frame_{DateTime.Now:yyyyMMdd_HHmmssfff}.jpg";

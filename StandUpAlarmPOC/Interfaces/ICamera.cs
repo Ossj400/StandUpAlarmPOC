@@ -10,11 +10,9 @@ namespace StandUpAlarmPOC.Interfaces
     {
         Task StartPreviewAsync();
         Task<Stream> CaptureFrameAsync();
-        Task StopPreviewAsync();
         Task InitializeCameraAsync();
         Task EnsureCaptureSessionAsync();
         Task OpenCameraAsync();
         Task CloseCameraAsync();
-        Task EnsureCaptureSessionAsyncNew();
     }
 }
